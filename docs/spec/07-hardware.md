@@ -224,8 +224,8 @@ let release(l: *mut UWord): Void {
 
 - **Процесс.** `crt0` разбирает блок процесса (`argc`, `argv`, `envp`,
   auxv — ABI, «Process start»), вызывает
-  `main(argc: UWord, argv: *UByte[]): Word` и передаёт результат в
-  `exit`.
+  `main(argc: UWord, argv: *UByte[]): Word` (или `main(): Word`) и
+  передаёт результат в `exit`.
 - **Boot-образ.** Свой `crt0`: при входе `r1` — адрес boot info block,
   `.bss` не обнулён, `ra` = 0 (SPECIFICATION, «State at the entry
   point»). Он обнуляет `.bss`, вызывает `main(0, null)` и пишет её

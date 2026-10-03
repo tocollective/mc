@@ -552,7 +552,7 @@ class Checker:
 			argv = PtrT(PtrT(UBYTE))
 			ft = main.type
 			if main.extern or ft.result != WORD or ft.params not in ([], [UWORD, argv]):
-				self.error(main.decl.loc, "'main' must be 'let main(argc: UWord, argv: *UByte[]): Word'")
+				self.error(main.decl.loc, "'main' must be 'let main(): Word' or 'let main(argc: UWord, argv: *UByte[]): Word'")
 		symbols = {}
 		for m in self.modules:
 			for name, sym in m.exports.items():
