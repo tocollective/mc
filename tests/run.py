@@ -46,7 +46,7 @@ import time
 MC_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.path.dirname(MC_DIR)
 COMPILER = os.path.join(ROOT, "mc", "mc.py")
-FIRMWARE = os.path.join(ROOT, "firmware", "main.m")    # in M: built with mc.py --rom
+FIRMWARE = os.path.join(ROOT, "wfw", "src", "main.m")    # in M: built with mc.py --rom
 EMULATOR = os.path.join(ROOT, "bin", "wrm081632.exe" if os.name == "nt" else "wrm081632")
 
 TEST_DIRS = ("tests", "examples")

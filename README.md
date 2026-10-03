@@ -3,7 +3,7 @@
 M is a systems programming language for the **WRM.081632** virtual machine.
 It combines explicit types, `let` / `let mut` declarations, and named module
 imports with direct access to memory, device registers, and CPU instructions.
-The project's [firmware](../firmware/README.md) and [Laix OS](../laix/README.md)
+The project's [firmware](../wfw/README.md) and [Laix OS](../laix/README.md)
 are written in M with assembly where needed.
 
 The current compiler, **M0**, is written in Python. It generates WRM assembly,
@@ -63,7 +63,7 @@ python3 -B mc/mc.py -I mc/runtime --check hello.m
 python3 mc/mc.py -I mc/runtime hello.m -o hello.img
 
 # Create the firmware ROM if one is not already available.
-python3 mc/mc.py --rom firmware/main.m -o firmware.rom
+python3 mc/mc.py --rom wfw/src/main.m -o firmware.rom
 
 # Run using an existing emulator binary; UART output appears on stdout.
 bin/wrm081632 --headless --rom firmware.rom --hdd hello.img
@@ -371,7 +371,7 @@ to the power controller; the emulator exits with the low eight bits as its code.
 ### ROM images
 
 ```sh
-python3 mc/mc.py --rom firmware/main.m -o firmware.rom --map firmware.map
+python3 mc/mc.py --rom wfw/src/main.m -o firmware.rom --map firmware.map
 ```
 
 ROM code starts at `0xFE000000`. Startup sets the stack to `0x00100000`, copies
