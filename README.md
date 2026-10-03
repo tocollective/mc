@@ -168,7 +168,8 @@ If a condition starts with `(`, those parentheses must enclose the whole conditi
 
 Source files use UTF-8; identifiers use ASCII. Comments support `//`, nested
 `/* ... */`, and `///` documentation comments. Strings are zero-terminated UTF-8
-byte sequences of type `*UByte`. ASCII character literals have type `UByte`;
+byte sequences of type `*UByte`; a string may span several lines, and each line
+break inside it becomes `\n`. ASCII character literals have type `UByte`;
 directly written non-ASCII character literals have type `UWord` and contain a
 Unicode code point.
 

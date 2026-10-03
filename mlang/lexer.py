@@ -210,10 +210,16 @@ class Lexer:
 		out = [] if quote == "'" else bytearray()
 		what = "character" if quote == "'" else "string"
 		while True:
-			if self.i >= n or src[self.i] == "\n":
+			if self.i >= n or (src[self.i] == "\n" and quote == "'"):
 				self.error(loc, f"unclosed {what} literal")
 				return None
 			c = src[self.i]
+			# A string may span lines: each line break becomes one '\n' byte
+			if quote == '"' and (c == "\n" or src.startswith("\r\n", self.i)):
+				self.i += 1 if c == "\n" else 2
+				self.newline(self.i - 1)
+				out.append(0x0A)
+				continue
 			if c == quote:
 				self.i += 1
 				return out if quote == "'" else bytes(out)
