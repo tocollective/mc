@@ -476,6 +476,7 @@ contains an `@warning` directive. Assembly tests use `;` comments for directives
 | [`mlang/diag.py`](mlang/diag.py) | Source locations and diagnostics |
 | [`elf.py`](elf.py), [`ld.py`](ld.py) | ELF support and linking for WRM |
 | [`runtime/`](runtime/) | Boot / ROM startup, traps, memory helpers, and UART output |
+| [`wcc/`](wcc/README.md) | C compiler, RV32IM translation, and C/M object interoperability |
 | [`examples/`](examples/) | Language examples and integration test programs |
 | [`tests/`](tests/) | Syntax, semantic, warning, code generation, and runtime tests |
 | [`docs/`](docs/) | Language specification and compiler design |
