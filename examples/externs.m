@@ -1,4 +1,8 @@
 
-extern let puts(msg: *UByte): Void // "puts:" label
+type String = *UByte
+type Char = UWord
 
-export { puts }
+extern let puts(text: String): Void // "puts:" label
+extern let putc(char: Char): Void // "putc:" label
+
+export { puts, putc }

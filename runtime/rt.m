@@ -13,4 +13,8 @@ let puts(s: *UByte): Void {
     }
 }
 
-export { puts }
+let putc(c: UWord): Void {
+    *UART_DATA = c
+}
+
+export { puts, putc }
