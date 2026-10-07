@@ -57,6 +57,80 @@ class NativeObjectTests(unittest.TestCase):
         with self.assertRaises(wcc.TranslationError):
             native.convert(rv_object([0x00050513])[:-20])
 
+    def test_soft_float_calls_become_wrm_instructions(self):
+        # call __mulsf3; call __ltsf2; ret: auipc ra,0; jalr ra,0(ra) for each
+        data = rv_object([0x00000097, 0x000080E7, 0x00000097, 0x000080E7, 0x00008067],
+                         [(0, 19, 1, 0), (8, 19, 2, 0)],
+                         [native.elf.Symbol("__mulsf3", bind=1), native.elf.Symbol("__ltsf2", bind=1)])
+        obj = native.elf.read_object(native.convert(data), "native.o")
+        words = struct.unpack(f"<{len(obj.sections[1].data) // 4}I", obj.sections[1].data)
+        self.assertEqual(list(words), [wcc.r_type(wcc.FLOAT_OPS["fmul"], 1, 1, 2),
+                                       wcc.r_type(wcc.FLOAT_OPS["flt"], 1, 1, 2),
+                                       wcc.r_type(0x11, 1, 0, 1),
+                                       wcc.i_type(0x61, 0, 31, 0)])
+        self.assertEqual(obj.sections[1].relocs, [])
+
+    def test_float_helpers_use_only_known_instructions(self):
+        for name, words in native.FLOAT_HELPERS.items():
+            self.assertTrue(words, name)
+            for word in words:
+                self.assertTrue(word & 0xFF in set(wcc.FLOAT_OPS.values()) | {0x11, 0x12, 0x20, 0x24},
+                                f"{name}: 0x{word:08x}")
+
+    def test_double_helpers_are_rejected_with_a_hint(self):
+        for helper in ("__adddf3", "__extendsfdf2", "__truncdfsf2", "__floatsidf", "__floatdisf"):
+            data = rv_object([0x00000097, 0x000080E7, 0x00008067], [(0, 19, 1, 0)],
+                             [native.elf.Symbol(helper, bind=1)])
+            with self.assertRaisesRegex(wcc.TranslationError, "binary32 floating point only"):
+                native.convert(data)
+
+    @unittest.skipUnless(os.environ.get("WCC_EMULATOR") and shutil.which("riscv64-unknown-elf-gcc"),
+                         "requires a RISC-V GNU toolchain and WCC_EMULATOR")
+    def test_float_arithmetic_comparisons_and_conversions_run_on_the_emulator(self):
+        source = """
+extern float sqrtf(float);
+extern float fabsf(float);
+extern float fminf(float, float);
+extern float fmaxf(float, float);
+volatile float va = 1.5f, vb = 2.5f, vc = -2.75f, vz = 0.0f, vthree = 3.0f;
+volatile int vseven = 7;
+volatile unsigned vbig = 4000000000u;
+int main(void) {
+    float a = va, b = vb, c = vc, zero = vz, three = vthree;
+    float nan = zero / zero;
+    float inf = three / zero;
+    if (a + b != 4.0f) return 1;
+    if (a - b != -1.0f) return 2;
+    if (a * b != 3.75f) return 3;
+    if (three / a != 2.0f) return 4;
+    if (!(a < b) || !(a <= b) || !(b > a) || !(b >= a)) return 5;
+    if (b < a || b <= a || a > b || a >= b) return 6;
+    if (!(a == a) || a != a || !(a != b) || a == b) return 7;
+    if (!(a <= a) || !(a >= a) || a < a || a > a) return 8;
+    if (nan < a || nan <= a || nan > a || nan >= a || nan == a || nan == nan) return 9;
+    if (!(nan != nan) || !(nan != a)) return 10;
+    if (!(inf > b) || !(-inf < c)) return 11;
+    if ((int)c != -2 || (int)b != 2) return 12;
+    if ((unsigned)b != 2u || (unsigned)(three * a) != 4u) return 13;
+    if ((float)vseven != 7.0f) return 14;
+    if ((float)vbig != 4000000000.0f) return 15;
+    if (-a != -1.5f || fabsf(c) != 2.75f) return 16;
+    if (sqrtf(three * three + 7.0f) != 4.0f) return 17;
+    if (fminf(a, b) != a || fmaxf(a, b) != b) return 18;
+    if (fminf(nan, b) != b || fmaxf(a, nan) != a) return 19;
+    return 0;
+}
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            c_source, output = directory / "float.c", directory / "float.rom"
+            c_source.write_text(source)
+            build_rom.build([c_source], output, native=True)
+            completed = subprocess.run([os.environ["WCC_EMULATOR"], "--rom", str(output),
+                                        "--headless", "--mute", "--no-net", "--deterministic"],
+                                       capture_output=True, text=True, timeout=10)
+            self.assertEqual(completed.returncode, 0, f"check {completed.returncode} failed: {completed.stderr}")
+
     @unittest.skipUnless(shutil.which("riscv64-unknown-elf-gcc"), "requires a RISC-V GNU toolchain")
     def test_compile_cli_outputs_a_wrm_object(self):
         with tempfile.TemporaryDirectory() as directory:

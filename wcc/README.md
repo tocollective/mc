@@ -61,8 +61,39 @@ stack. An M `Word` corresponds to C `int`, and `UWord` to `unsigned int`.
 Use compatible declarations on both sides. Cross-language variadic functions,
 by-value aggregates, over-aligned stack objects, and 64-bit arguments split
 across the register/stack boundary are outside the supported interface.
-Floating-point C arithmetic may require additional compiler helpers; a full
-C standard library is not supplied.
+A full C standard library is not supplied.
+
+### Floating point
+
+The native path (`wcc.py -c`, or `build_rom.py --native`) supports C `float`.
+WRM keeps IEEE binary32 in the general registers, and GCC for RV32IM
+(`-mabi=ilp32`, soft float) passes `float` the same way: operands in `a0`
+and `a1`, result in `a0`. So `wcc` replaces each call of a libgcc soft-float
+helper with the WRM instruction itself, one cycle and no call:
+
+| C | Helper | WRM |
+|---|--------|-----|
+| `a + b`, `a - b`, `a * b`, `a / b` | `__addsf3`, `__subsf3`, `__mulsf3`, `__divsf3` | `FADD`, `FSUB`, `FMUL`, `FDIV` |
+| `-a` | `__negsf2` | `FSGNJN` |
+| `a == b`, `!=`, `<`, `<=`, `>`, `>=` | `__eqsf2`, `__nesf2`, `__ltsf2`, `__lesf2`, `__gtsf2`, `__gesf2`, `__unordsf2` | `FEQ`, `FLT`, `FLE` (+ one more instruction to give the helper's result) |
+| `(float)int`, `(float)unsigned` | `__floatsisf`, `__floatunsisf` | `ITOF`, `UTOF` |
+| `(int)f`, `(unsigned)f` | `__fixsfsi`, `__fixunssfsi` | `FTOI`, `FTOU` (toward zero, saturating) |
+| `sqrtf`, `fabsf`, `fminf`, `fmaxf` | (the functions themselves) | `FSQRT`, `FSGNJX`, `FMIN`, `FMAX` |
+
+Comparisons with a NaN are false, except `!=`, as in C. Declare the four
+`<math.h>` functions yourself (`extern float sqrtf(float);`): there is no
+header.
+
+WRM has no binary64. Write `1.0f`, not `1.0`, which is a `double`: it and
+`double`, `long double` and the conversions between `float` and 64-bit
+integers need libgcc helpers that do not exist here, so `wcc` rejects them
+with a message that names the helper. Mixed C/M programs work as before: M's
+`Float` and C's `float` are the same value in the same register.
+
+The plain `build_rom.py file.c` path (the raw translation of a linked RV32IM
+image) has no floating point and is about 6 times slower than the native
+path, because every RV instruction becomes a 32-word slot there. Use
+`--native` for anything that computes.
 
 The native compiler reserves the six RV temporary registers that would map to
 WRM callee-saved registers. It remaps `a0`–`a7` to `r1`–`r8`, `sp` to `r30`,

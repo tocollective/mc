@@ -3,6 +3,7 @@
 
 import argparse
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -26,7 +27,10 @@ BOOT_MAGIC = 0x424D5257
 def run(command):
     completed = subprocess.run(command, capture_output=True, text=True)
     if completed.returncode:
-        raise wcc.TranslationError(f"{command[0]} failed:\n{completed.stderr.strip()}")
+        message = f"{command[0]} failed:\n{completed.stderr.strip()}"
+        if re.search(r"undefined reference to `__\w*(?:sf|df)\d", completed.stderr):
+            message += "\nhint: floating point is supported by the native path only: use --native"
+        raise wcc.TranslationError(message)
     return completed.stdout
 
 

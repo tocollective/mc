@@ -36,6 +36,14 @@ MEMORY_OPS = {
 }
 BRANCH_OPS = {"beq": 0x50, "bne": 0x51, "blt": 0x52,
               "bge": 0x53, "bltu": 0x54, "bgeu": 0x55}
+# WRM floating point (binary32 in the general registers), R-type. The
+# native C path uses these in place of the soft-float helpers of libgcc.
+FLOAT_OPS = {
+    "fadd": 0x70, "fsub": 0x71, "fmul": 0x72, "fdiv": 0x73, "fsqrt": 0x74,
+    "fmin": 0x75, "fmax": 0x76, "fsgnjn": 0x7A, "fsgnjx": 0x7B,
+    "feq": 0x80, "flt": 0x81, "fle": 0x82,
+    "ftoi": 0x84, "ftou": 0x85, "itof": 0x86, "utof": 0x87,
+}
 
 
 class TranslationError(ValueError):

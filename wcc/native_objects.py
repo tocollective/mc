@@ -1,6 +1,7 @@
 """Compile RV32IM C into relocatable WRM objects using the M register ABI."""
 
 from pathlib import Path
+import re
 import struct
 import subprocess
 import sys
@@ -25,6 +26,49 @@ FLAGS = ["-march=rv32im", "-mabi=ilp32", "-mno-relax", "-msmall-data-limit=0",
          "-fno-pic", "-fno-pie", "-fno-stack-protector", "-fno-common",
          "-fno-optimize-sibling-calls", "-fno-jump-tables",
          "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-O1"]
+
+
+# Floating point. GCC compiles `float` for RV32IM (soft float, ilp32) into
+# calls to the libgcc helpers, with the operands in a0 and a1 and the result
+# in a0: binary32 held in general registers, as on WRM. So the call is
+# replaced by the WRM instruction itself, with no call and no helper.
+# a0 = r1, a1 = r2; r3 and r4 (a2, a3) are caller-saved, free to use.
+def _fp(op, rd, rs1, rs2=0):
+    return wcc.r_type(wcc.FLOAT_OPS[op], rd, rs1, rs2)
+
+
+_NOT = wcc.i_type(0x24, 1, 1, 1)                 # xori r1, r1, 1
+FLOAT_HELPERS = {
+    "__addsf3": [_fp("fadd", 1, 1, 2)],
+    "__subsf3": [_fp("fsub", 1, 1, 2)],
+    "__mulsf3": [_fp("fmul", 1, 1, 2)],
+    "__divsf3": [_fp("fdiv", 1, 1, 2)],
+    "__negsf2": [_fp("fsgnjn", 1, 1, 1)],
+    "__floatsisf": [_fp("itof", 1, 1)],
+    "__floatunsisf": [_fp("utof", 1, 1)],
+    "__fixsfsi": [_fp("ftoi", 1, 1)],         # toward zero, saturating, like a C cast
+    "__fixunssfsi": [_fp("ftou", 1, 1)],
+    # Comparisons return an int that the caller compares with 0: eq/ne give
+    # 0 when equal, lt < 0 when a < b, le <= 0, gt > 0, ge >= 0; a NaN
+    # operand makes every one of them false.
+    "__eqsf2": [_fp("feq", 1, 1, 2), _NOT],
+    "__nesf2": [_fp("feq", 1, 1, 2), _NOT],
+    "__ltsf2": [_fp("flt", 1, 1, 2), wcc.r_type(0x11, 1, 0, 1)],     # 0 - (a < b)
+    "__lesf2": [_fp("fle", 1, 1, 2), _NOT],
+    "__gtsf2": [_fp("flt", 1, 2, 1)],                                # b < a
+    "__gesf2": [_fp("fle", 1, 2, 1), wcc.i_type(0x20, 1, 1, -1)],    # (b <= a) - 1
+    "__unordsf2": [_fp("feq", 3, 1, 1), _fp("feq", 4, 2, 2),
+                   wcc.r_type(0x12, 3, 3, 4), wcc.i_type(0x24, 1, 3, 1)],
+    # <math.h> functions that are one instruction
+    "sqrtf": [_fp("fsqrt", 1, 1)],
+    "fabsf": [_fp("fsgnjx", 1, 1, 1)],
+    "fminf": [_fp("fmin", 1, 1, 2)],
+    "fmaxf": [_fp("fmax", 1, 1, 2)],
+}
+# libgcc helpers for what WRM has no hardware for: double and long double
+# (binary64/binary128 arithmetic, comparisons, conversions), and float <-> 64-bit int
+UNSUPPORTED_FLOAT = re.compile(r"^__\w*(?:df|tf)")
+UNSUPPORTED_FLOAT_NAMES = {"__floatdisf", "__floatundisf", "__fixsfdi", "__fixunssfdi"}
 
 
 def machine(path):
@@ -146,10 +190,21 @@ def convert(data, name="<RISC-V object>"):
                     fail("unexpected relocation inside an AUIPC/JALR call pair")
                 if set(used_registers(following)) & set(FIXED):
                     fail("call pair uses a reserved register; recompile with wcc.py -c")
-                words += [0x30 | rd << 8, wcc.i_type(0x23, rd, rd, 0),
-                          wcc.i_type(0x61, REGISTERS[following.rd], rd, 0)]
-                emit_reloc(0, "R_WRM_HI19")
-                emit_reloc(1, "R_WRM_LO13")
+                target = symbols[symbol]
+                helper = FLOAT_HELPERS.get(target.name) if target.shndx == elf.SHN_UNDEF else None
+                if helper is not None:
+                    # the whole call is the instruction(s) itself
+                    words += helper
+                elif target.shndx == elf.SHN_UNDEF and (UNSUPPORTED_FLOAT.match(target.name)
+                                                        or target.name in UNSUPPORTED_FLOAT_NAMES):
+                    fail(f"{original.name}+0x{offset:x}: '{target.name}': WRM has binary32 "
+                         "floating point only. Use 'float' and the 'f' suffix (1.0f), not double "
+                         "or long double, and no 64-bit integer <-> float conversions")
+                else:
+                    words += [0x30 | rd << 8, wcc.i_type(0x23, rd, rd, 0),
+                              wcc.i_type(0x61, REGISTERS[following.rd], rd, 0)]
+                    emit_reloc(0, "R_WRM_HI19")
+                    emit_reloc(1, "R_WRM_LO13")
                 consumed.add(offset + 4)
             elif kind in (23, 26):  # PCREL_HI20 / HI20
                 if ins.op != ("auipc" if kind == 23 else "lui"):

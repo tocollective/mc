@@ -39,6 +39,14 @@ type VideoRegs {
 }
 
 let kbd: *volatile mut KbdRegs = 0xFD00_1000 as *volatile mut KbdRegs
+
+type TimerRegs {
+    countLo: UWord,
+    countHi: UWord,
+    frequency: UWord,
+}
+
+let timer: *volatile mut TimerRegs = 0xFD00_3000 as *volatile mut TimerRegs
 let KBD_READY: UWord = 1
 
 let video: *volatile mut VideoRegs = 0xFD00_7000 as *volatile mut VideoRegs
@@ -267,6 +275,12 @@ let drawFrame(width: UWord, height: UWord, v: *mut View): Bool {
     return true
 }
 
+/// Writes v in decimal to the UART.
+let putDec(v: UWord): Void {
+    if v >= 10 putDec(v / 10)
+    putc(CHAR_0 + v % 10)
+}
+
 let main(): Word {
     puts("Mandelbrot!\n")
 
@@ -294,11 +308,20 @@ let main(): Word {
 
         if view.redraw {
             view.redraw = false     // set again by a key pressed while drawing
+            let start: UWord = timer.countLo
             if !drawFrame(width, height, &mut view) {
                 puts("Error!\n")
                 hlt()
             }
-            // puts("Done!\n")
+            if !view.redraw {
+                // a finished picture, not an interrupted one
+                let ticks: UWord = timer.countLo - start
+                puts("frame: ")
+                putDec(ticks)
+                puts(" ticks, ")
+                putDec(ticks / (timer.frequency / 1000))
+                puts(" ms\n")
+            }
         }
 
         videoWaitVblank()
